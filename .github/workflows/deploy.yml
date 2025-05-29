@@ -9,14 +9,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      # Inject AWS credentials into Terraform
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: true
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
+      - name: Set AWS Credentials in Env
+        run: |
+          echo "AWS_ACCESS_KEY_ID set via secrets"
+          echo "AWS_SECRET_ACCESS_KEY set via secrets"
 
       - name: Install Terraform CLI
         run: |
@@ -24,11 +25,26 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com  $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt update && sudo apt install terraform -y
 
-      - name: Initialize & Apply Terraform
+      - name: Initialize & Apply Terraform (Local Backend First)
         id: apply
         run: |
           cd terraform
+
+          # Clean up any existing state or config
+          rm -rf .terraform* *.tfstate*
+
+          # Step 1: Init with local backend
+          terraform init -backend=false
+
+          # Step 2: Apply to create infra including S3 bucket
+          terraform apply -auto-approve \
+            -var "aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -var "aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -var "key_pair_name=${{ secrets.KEY_PAIR_NAME }}"
+
+          # Step 3: Re-init with S3 backend
           terraform init \
+            -reconfigure \
             -backend-config="bucket=todo-app-state-bucket" \
             -backend-config="key=todo-devops-suite/terraform.tfstate" \
             -backend-config="region=us-east-1" \
@@ -36,6 +52,7 @@ jobs:
             -backend-config="skip_credentials_validation=true" \
             -backend-config="skip_requesting_account_id=true"
 
+          # Final apply to ensure full sync
           terraform apply -auto-approve \
             -var "aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
             -var "aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
