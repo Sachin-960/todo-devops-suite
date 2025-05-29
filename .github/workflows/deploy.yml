@@ -31,11 +31,41 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com  $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt update && sudo apt install terraform -y
 
-      - name: Initialize & Apply Terraform
-        id: apply
+      - name: Install AWS CLI
         run: |
+          sudo apt update -y
+          sudo apt install -y awscli
+
+      - name: Ensure S3 Bucket Exists & Init Terraform
+        id: terraform-init
+        run: |
+          BUCKET_NAME="todo-app-state-bucket"
+          REGION="us-east-1"
+
+          # Check if bucket exists
+          BUCKET_EXISTS=$(aws s3api head-bucket --bucket "$BUCKET_NAME" 2>&1 || echo "not-found")
+
+          if [[ "$BUCKET_EXISTS" == *"404"* ]]; then
+            echo "Bucket $BUCKET_NAME not found. Creating it..."
+            aws s3api create-bucket \
+              --bucket "$BUCKET_NAME" \
+              --region "$REGION" \
+              --create-bucket-configuration LocationConstraint=$REGION
+            echo "✅ Created S3 bucket: $BUCKET_NAME"
+          else
+            echo "Bucket $BUCKET_NAME already exists."
+          fi
+
+          # Terraform Init with dynamic backend config
           cd terraform
-          terraform init
+          terraform init \
+            -backend-config="bucket=$BUCKET_NAME" \
+            -backend-config="key=todo-devops-suite/terraform.tfstate" \
+            -backend-config="region=$REGION" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_requesting_account_id=true"
+
           terraform apply -auto-approve \
             -var "aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
             -var "aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
@@ -72,7 +102,7 @@ jobs:
             sudo systemctl start docker
             sudo systemctl enable docker
 
-            # Add ubuntu user to docker group (no need to re-login)
+            # Add ubuntu user to docker group
             sudo usermod -aG docker ubuntu
 
             # Install Docker Compose
@@ -88,10 +118,11 @@ jobs:
             # Make scripts executable
             chmod +x todo-devops-suite/scripts/*.sh
 
-            # Run deployment script
+            # Run blue-green deployment
             cd todo-devops-suite
-            sudo docker-compose down
-            sudo docker-compose up -d
+            sudo mkdir -p /opt/todo
+            echo "blue" | sudo tee /opt/todo/current > /dev/null
+            ./scripts/deploy.sh
 
       - name: Show Success Message
         run: |
