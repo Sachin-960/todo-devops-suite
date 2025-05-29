@@ -1,0 +1,69 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "iteration": 1678901234,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 2,
+      "options": {},
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "rate(http_requests_total[5m])",
+          "interval": "",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "HTTP Requests Per Minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "{job=\"nodejs\"}",
+          "queryType": "logs"
+        }
+      ],
+      "title": "Application Logs",
+      "type": "logs"
+    }
+  ],
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [],
+  "templating": { "list": [] },
+  "time": "now-6h",
+  "timepicker": {},
+  "timezone": "",
+  "title": "Todo App Monitoring",
+  "uid": "todo-dashboard",
+  "version": 1
+}

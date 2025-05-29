@@ -1,0 +1,71 @@
+#---------------------------
+#Plan File
+#---------------------------
+Plan.txt
+
+
+# ---------------------------
+# Node.js / NPM
+# ---------------------------
+node_modules/
+npm-debug.log
+package-lock.json
+yarn.lock
+*.iml
+
+# ---------------------------
+# Docker & Build Artifacts
+# ---------------------------
+*.tar
+*.tar.gz
+*.zip
+*.env
+*.pem
+*.key
+*.crt
+*.csr
+
+# ---------------------------
+# Terraform
+# ---------------------------
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraformrc
+terraform.rc
+
+# ---------------------------
+# Logs & Temp Files
+# ---------------------------
+logs/
+*.log
+*.pid
+*.seed
+*.pid.tmp
+
+# ---------------------------
+# IDE & Editor Files
+# ---------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ---------------------------
+# OS Generated Files
+# ---------------------------
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+lost+found/
+
+# ---------------------------
+# Git Config (if any)
+# ---------------------------
+.git/config

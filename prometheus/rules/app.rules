@@ -1,0 +1,11 @@
+groups:
+  - name: app-health
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.instance }}"
+          description: "{{ $value }}% of requests are failing"

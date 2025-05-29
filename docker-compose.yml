@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: todo-mongo
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    environment:
+      MONGO_DATA_DIR: /data/db
+
+  blue:
+    build: ./api
+    container_name: todo-api-blue
+    ports:
+      - "3000"
+    depends_on:
+      - mongo
+    environment:
+      PORT: 3000
+      BREVO_API_KEY: $BREVO_API_KEY
+      ADMIN_EMAIL: $ADMIN_EMAIL
+      SMTP_FROM: $SMTP_FROM
+    restart: unless-stopped
+
+  green:
+    build: ./api
+    container_name: todo-api-green
+    ports:
+      - "3001"
+    depends_on:
+      - mongo
+    environment:
+      PORT: 3001
+      BREVO_API_KEY: $BREVO_API_KEY
+      ADMIN_EMAIL: $ADMIN_EMAIL
+      SMTP_FROM: $SMTP_FROM
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus
+    container_name: todo-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    container_name: todo-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: todo-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki:/etc/loki
+    command: -config.expand-env -config.file=/etc/loki/config.yaml
+    restart: unless-stopped
+
+volumes:
+  mongo-data:

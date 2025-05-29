@@ -1,0 +1,111 @@
+name: Deploy Todo App to AWS – Blue-Green Strategy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: true
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set AWS Credentials
+        run: |
+          mkdir -p ~/.aws
+          echo "[default]
+          aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region = us-east-1" > ~/.aws/credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Install Terraform CLI
+        run: |
+          wget -O- https://apt.releases.hashicorp.com/gpg  | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com  $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt update && sudo apt install terraform -y
+
+      - name: Initialize & Apply Terraform
+        id: apply
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve \
+            -var "aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -var "aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -var "key_pair_name=${{ secrets.KEY_PAIR_NAME }}"
+
+      - name: Extract Public IP
+        id: ip
+        run: |
+          INSTANCE_IP=$(terraform output -raw public_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+          echo "INSTANCE_IP=$INSTANCE_IP" >> $GITHUB_ENV
+
+      - name: Wait for SSH
+        run: sleep 150
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.INSTANCE_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Update system
+            sudo apt update -y
+
+            # Install Docker
+            sudo apt install -y docker.io
+
+            # Start and enable Docker service
+            sudo systemctl start docker
+            sudo systemctl enable docker
+
+            # Add ubuntu user to docker group (no need to re-login)
+            sudo usermod -aG docker ubuntu
+
+            # Install Docker Compose
+            sudo apt install -y docker-compose
+
+            # Clone repo
+            if [ ! -d "todo-devops-suite" ]; then
+              git clone https://github.com/Sachin-960/todo-devops-suite.git  todo-devops-suite
+            else
+              cd todo-devops-suite && git pull origin main
+            fi
+
+            # Make scripts executable
+            chmod +x todo-devops-suite/scripts/*.sh
+
+            # Run deployment script
+            cd todo-devops-suite
+            sudo docker-compose down
+            sudo docker-compose up -d
+
+      - name: Show Success Message
+        run: |
+          echo ""
+          echo "✅ App deployed successfully!"
+          echo "👉 Access your app at: http://${{ env.INSTANCE_IP }}:3000"
+          echo ""
+
+      - name: Cleanup on Failure
+        if: ${{ failure() }}
+        run: |
+          echo "Build failed. Destroying infrastructure..."
+          cd terraform
+          terraform destroy -auto-approve \
+            -var "aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -var "aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -var "key_pair_name=${{ secrets.KEY_PAIR_NAME }}"
