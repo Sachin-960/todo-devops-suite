@@ -9,21 +9,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      # Inject AWS credentials into Terraform
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: true
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
-      - name: Set AWS Credentials
-        run: |
-          mkdir -p ~/.aws
-          echo "[default]
-          aws_access_key_id = ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key = ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          region = us-east-1" > ~/.aws/credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Install Terraform CLI
         run: |
@@ -31,47 +24,14 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com  $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt update && sudo apt install terraform -y
 
-      - name: Install AWS CLI v2
+      - name: Initialize & Apply Terraform
+        id: apply
         run: |
-          # Install dependencies
-          sudo apt update && sudo apt install -y unzip curl
-
-          # Download AWS CLI v2
-          curl "https://awscli.amazonaws.com/awscli-extras-linux-x86_64.zip " -o "awscliv2.zip"
-
-          # Unzip and install
-          unzip awscliv2.zip
-          sudo ./aws/install --update
-
-          # Verify installation
-          aws --version
-
-      - name: Ensure S3 Bucket Exists & Init Terraform
-        id: terraform-init
-        run: |
-          BUCKET_NAME="todo-app-state-bucket"
-          REGION="us-east-1"
-
-          # Check if bucket exists
-          BUCKET_EXISTS=$(aws s3api head-bucket --bucket "$BUCKET_NAME" 2>&1 || echo "not-found")
-
-          if [[ "$BUCKET_EXISTS" == *"404"* ]]; then
-            echo "Bucket $BUCKET_NAME not found. Creating it..."
-            aws s3api create-bucket \
-              --bucket "$BUCKET_NAME" \
-              --region "$REGION" \
-              --create-bucket-configuration LocationConstraint=$REGION
-            echo "✅ Created S3 bucket: $BUCKET_NAME"
-          else
-            echo "Bucket $BUCKET_NAME already exists."
-          fi
-
-          # Terraform Init with dynamic backend config
           cd terraform
           terraform init \
-            -backend-config="bucket=$BUCKET_NAME" \
+            -backend-config="bucket=todo-app-state-bucket" \
             -backend-config="key=todo-devops-suite/terraform.tfstate" \
-            -backend-config="region=$REGION" \
+            -backend-config="region=us-east-1" \
             -backend-config="skip_region_validation=true" \
             -backend-config="skip_credentials_validation=true" \
             -backend-config="skip_requesting_account_id=true"
